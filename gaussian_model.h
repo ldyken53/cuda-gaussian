@@ -41,8 +41,8 @@ private:
     bool data_loaded;
     
     // BVH and temporary data for inference
-    static cuBQL::bvh3f samples_bvh;
-    static cuBQL::bvh3f gaussian_bvh;
+    cuBQL::bvh3f samples_bvh;
+    cuBQL::bvh3f gaussian_bvh;
     float* d_stored_samples;   // Copy of samples for GPU processing
     int num_stored_samples;
 
@@ -182,7 +182,7 @@ public:
         CHECK_CUDA(cudaMemcpy(d_rotations, h_rotations.data(), 4 * num_gaussians * sizeof(float), cudaMemcpyHostToDevice), true);
         CHECK_CUDA(cudaMemcpy(d_values, h_values.data(), num_gaussians * sizeof(float), cudaMemcpyHostToDevice), true);
         CHECK_CUDA(cudaMemcpy(d_weights, h_weights.data(), num_gaussians * sizeof(float), cudaMemcpyHostToDevice), true);
-        
+
         data_loaded = true;
         std::cout << "Successfully loaded " << num_gaussians << " Gaussians from " << filename << std::endl;
         return true;
@@ -270,10 +270,6 @@ public:
             // Copy results back to host
             CHECK_CUDA(cudaMemcpy(out_values, d_out_values, num_samples * sizeof(float), cudaMemcpyDeviceToHost), debug);
             CHECK_CUDA(cudaMemcpy(out_weights, d_out_weights, num_samples * sizeof(float), cudaMemcpyDeviceToHost), debug);
-            
-            if (debug) {
-                std::cout << "Inference completed successfully" << std::endl;
-            }
             
         } catch (const std::exception& e) {
             std::cerr << "Error during rasterization: " << e.what() << std::endl;

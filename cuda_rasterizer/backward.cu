@@ -353,9 +353,6 @@ __global__ void sampleRenderCUDA(const int S,
 			// Scale S by 3 to include up to where the weight is a tenth the cutoff
 			float m = sqrtf(-2 * logf((0.1 * WEIGHT_CUTOFF) / weights[primID]));
 			const float3 scaled_S = { Smat[0][0] * m, Smat[1][1] * m, Smat[2][2] * m };
-
-			// Create array for corner computations
-			const float n[2] = {-1.0f, 1.0f};
 			
 			const float3 position = { means3D[3 * primID], means3D[3 * primID + 1], means3D[3 * primID + 2] };
 

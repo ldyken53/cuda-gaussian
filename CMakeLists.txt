@@ -44,6 +44,10 @@ add_library(CudaRasterizer
     cuda_rasterizer/rasterizer.h
 )
 
+target_compile_options(CudaRasterizer PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+)
+
 set_target_properties(CudaRasterizer PROPERTIES 
     CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
     CUDA_RESOLVE_DEVICE_SYMBOLS ON
@@ -69,6 +73,11 @@ target_link_libraries(CudaRasterizer
 add_executable(test_gaussian_model
     test.cu
 )
+
+target_compile_options(test_gaussian_model PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+)
+
 
 set_target_properties(test_gaussian_model PROPERTIES 
     CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"

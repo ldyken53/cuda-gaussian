@@ -74,10 +74,10 @@ void CudaRasterizer::Rasterizer::forward(
 
 	if (debug) cudaEventRecord(events[2]);
 	if (use_gaussian_bvh) {
-		cuBQL::BuildConfig cfg;
-    	cfg.makeLeafThreshold = 33;
-		cfg.maxAllowedLeafSize = 32;
-    	cuBQL::cuda::radixBuilder(gaussian_bvh, aabbs, P, cfg);
+		// cuBQL::BuildConfig cfg;
+    	// cfg.makeLeafThreshold = 33;
+		// cfg.maxAllowedLeafSize = 32;
+    	// cuBQL::cuda::radixBuilder(gaussian_bvh, aabbs, P, cfg);
 	}
 	if (debug) cudaEventRecord(events[3]);
 
