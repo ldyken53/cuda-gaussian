@@ -197,44 +197,39 @@ public:
     int getNumGaussians() const { return num_gaussians; }
     bool isDataLoaded() const { return data_loaded; }
     
-    // Main inference method that rasterizes Gaussians at sample points
-    bool infer(const float* samples, int num_samples, float* out_values, float* out_weights,
-               float scale_modifier = 1.0f, float background = 0.0f, 
-               bool use_gaussian_bvh = false, bool debug = false) {
+    // Modified inference method that works with GPU buffers directly
+    bool infer(const float* d_samples, int num_samples, float* d_out_values, float* d_out_weights,
+            float scale_modifier = 1.0f, float background = 0.0f, 
+            bool use_gaussian_bvh = false, bool debug = false) {
         
-        if (!data_loaded || !samples || !out_values || !out_weights || num_samples <= 0) {
+        if (!data_loaded || !d_samples || !d_out_values || !d_out_weights || num_samples <= 0) {
             std::cerr << "Error: Invalid input parameters for inference" << std::endl;
             return false;
         }
         
         if (debug) {
             std::cout << "Starting inference with " << num_samples << " samples and " 
-                      << num_gaussians << " Gaussians" << std::endl;
+                    << num_gaussians << " Gaussians" << std::endl;
         }
         
-        // Copy samples to device if not already stored
-        if (!d_stored_samples || num_stored_samples != num_samples) {
-            if (d_stored_samples) {
-                cudaFree(d_stored_samples);
-            }
-            num_stored_samples = num_samples;
-            CHECK_CUDA(cudaMalloc((void**)&d_stored_samples, 3 * num_samples * sizeof(float)), debug);
+        // Store reference to samples buffer (no copying needed since already on GPU)
+        if (d_stored_samples && num_stored_samples != num_samples) {
+            cudaFree(d_stored_samples);
+            d_stored_samples = nullptr;
         }
-        CHECK_CUDA(cudaMemcpy(d_stored_samples, samples, 3 * num_samples * sizeof(float), cudaMemcpyHostToDevice), debug);
+        
+        // Use the provided GPU buffer directly
+        d_stored_samples = const_cast<float*>(d_samples);
+        num_stored_samples = num_samples;
         
         // Build BVH for samples
         buildSamplesBVH(debug);
         
-        // Allocate device memory for outputs  
-        float* d_out_values;
-        float* d_out_weights;
+        // Allocate device memory for conics (internal use only)
         float* d_conics;
+        CHECK_CUDA(cudaMalloc((void**)&d_conics, num_gaussians * 6 * sizeof(float)), debug);
         
-        CHECK_CUDA(cudaMalloc((void**)&d_out_values, num_samples * sizeof(float)), debug);
-        CHECK_CUDA(cudaMalloc((void**)&d_out_weights, num_samples * sizeof(float)), debug);
-        CHECK_CUDA(cudaMalloc((void**)&d_conics, num_gaussians * 6 * sizeof(float)), debug); // 6 elements per covariance matrix
-        
-        // Initialize outputs
+        // Initialize outputs (caller-provided buffers)
         CHECK_CUDA(cudaMemset(d_out_values, 0, num_samples * sizeof(float)), debug);
         CHECK_CUDA(cudaMemset(d_out_weights, 0, num_samples * sizeof(float)), debug);
 
@@ -257,32 +252,28 @@ public:
                 d_rotations,            // rotations
                 d_values,               // values
                 d_weights,              // weights
-                d_stored_samples,       // samples
+                d_stored_samples,       // samples (GPU buffer)
                 samples_bvh,            // BVH for samples
                 gaussian_bvh,           // BVH for Gaussians (will be built if use_gaussian_bvh)
                 d_conics,               // output conics
-                d_out_values,           // output values
-                d_out_weights,          // output weights
+                d_out_values,           // output values (caller's GPU buffer)
+                d_out_weights,          // output weights (caller's GPU buffer)
                 use_gaussian_bvh,       // whether to use Gaussian BVH
                 debug                   // debug flag
             );
             
-            // Copy results back to host
-            CHECK_CUDA(cudaMemcpy(out_values, d_out_values, num_samples * sizeof(float), cudaMemcpyDeviceToHost), debug);
-            CHECK_CUDA(cudaMemcpy(out_weights, d_out_weights, num_samples * sizeof(float), cudaMemcpyDeviceToHost), debug);
-            
         } catch (const std::exception& e) {
             std::cerr << "Error during rasterization: " << e.what() << std::endl;
-            cudaFree(d_out_values);
-            cudaFree(d_out_weights);
             cudaFree(d_conics);
+            d_stored_samples = nullptr; // Don't free since we don't own it
             return false;
         }
         
         // Clean up temporary device memory
-        cudaFree(d_out_values);
-        cudaFree(d_out_weights);
         cudaFree(d_conics);
+        d_stored_samples = nullptr; // Don't free since we don't own it
+
+        // CHECK_CUDA(cudaMemset(d_out_values, 0.5, num_samples * sizeof(float)), debug);
         
         return true;
     }

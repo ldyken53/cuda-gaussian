@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
+option(BUILD_GAUSSIAN_TESTS "Build test executable for Gaussian model" OFF)
+
 project(GaussianModelTest LANGUAGES CUDA CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -69,40 +71,41 @@ target_link_libraries(CudaRasterizer
     ${CUDA_CUDART_LIBRARY}
 )
 
-# Test executable
-add_executable(test_gaussian_model
-    test.cu
-)
+if(BUILD_GAUSSIAN_TESTS)
+  # Test executable
+  add_executable(test_gaussian_model
+      test.cu
+  )
 
-target_compile_options(test_gaussian_model PRIVATE
-    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
-)
+  target_compile_options(test_gaussian_model PRIVATE
+      $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+  )
 
+  set_target_properties(test_gaussian_model PROPERTIES 
+      CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
+      CUDA_RESOLVE_DEVICE_SYMBOLS ON
+  )
 
-set_target_properties(test_gaussian_model PROPERTIES 
-    CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
-    CUDA_RESOLVE_DEVICE_SYMBOLS ON
-)
+  # Link libraries to the test executable
+  target_link_libraries(test_gaussian_model
+      CudaRasterizer
+      ${CUDA_LIBRARIES}
+      ${CUDA_CUDART_LIBRARY}
+  )
 
-# Link libraries to the test executable
-target_link_libraries(test_gaussian_model
-    CudaRasterizer
-    ${CUDA_LIBRARIES}
-    ${CUDA_CUDART_LIBRARY}
-)
+  # Platform-specific settings
+  if(UNIX)
+      target_link_libraries(test_gaussian_model pthread)
+  endif()
 
-# Platform-specific settings
-if(UNIX)
-    target_link_libraries(test_gaussian_model pthread)
+  # Custom targets for running tests
+  add_custom_target(run_test
+      COMMAND test_gaussian_model point_cloud.ply 100
+      DEPENDS test_gaussian_model
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+      COMMENT "Running GaussianModel test with 100 points"
+  )
 endif()
-
-# Custom targets for running tests
-add_custom_target(run_test
-    COMMAND test_gaussian_model point_cloud.ply 100
-    DEPENDS test_gaussian_model
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    COMMENT "Running GaussianModel test with 100 points"
-)
 
 # Print configuration info
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")

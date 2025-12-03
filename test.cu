@@ -69,8 +69,9 @@ public:
         return success;
     }
     
+    // Updated test function that manages GPU buffers
     bool runInferenceTest(bool use_gaussian_bvh = false, float scale_modifier = 1.0f, 
-                         float background = 0.0f, bool debug = false) {
+                        float background = 0.0f, bool debug = false) {
         std::cout << "\n=== Running Inference Test ===" << std::endl;
         std::cout << "Test parameters:" << std::endl;
         std::cout << "  - Number of test points: " << num_test_points << std::endl;
@@ -79,32 +80,56 @@ public:
         std::cout << "  - Background: " << background << std::endl;
         std::cout << "  - Debug mode: " << (debug ? "Yes" : "No") << std::endl;
         
-        // Clear previous results
+        // Allocate GPU buffers for samples and outputs
+        float* d_test_samples;
+        float* d_output_values;
+        float* d_output_weights;
+        
+        CHECK_CUDA(cudaMalloc((void**)&d_test_samples, 3 * num_test_points * sizeof(float)), debug);
+        CHECK_CUDA(cudaMalloc((void**)&d_output_values, num_test_points * sizeof(float)), debug);
+        CHECK_CUDA(cudaMalloc((void**)&d_output_weights, num_test_points * sizeof(float)), debug);
+        
+        // Copy test samples to GPU
+        CHECK_CUDA(cudaMemcpy(d_test_samples, test_samples.data(), 
+                            3 * num_test_points * sizeof(float), cudaMemcpyHostToDevice), debug);
+        
+        // Clear host output arrays
         std::fill(output_values.begin(), output_values.end(), 0.0f);
         std::fill(output_weights.begin(), output_weights.end(), 0.0f);
         
         auto start = std::chrono::high_resolution_clock::now();
         
         bool success = model.infer(
-            test_samples.data(),     // samples
-            num_test_points,         // num_samples
-            output_values.data(),    // out_values
-            output_weights.data(),   // out_weights
-            scale_modifier,          // scale_modifier
-            background,              // background
-            use_gaussian_bvh,        // use_gaussian_bvh
-            debug                    // debug
+            d_test_samples,      // samples (GPU buffer)
+            num_test_points,     // num_samples
+            d_output_values,     // out_values (GPU buffer)
+            d_output_weights,    // out_weights (GPU buffer)
+            scale_modifier,      // scale_modifier
+            background,          // background
+            use_gaussian_bvh,    // use_gaussian_bvh
+            debug                // debug
         );
         
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
         
         if (success) {
+            // Copy results back to host
+            CHECK_CUDA(cudaMemcpy(output_values.data(), d_output_values, 
+                                num_test_points * sizeof(float), cudaMemcpyDeviceToHost), debug);
+            CHECK_CUDA(cudaMemcpy(output_weights.data(), d_output_weights, 
+                                num_test_points * sizeof(float), cudaMemcpyDeviceToHost), debug);
+            
             std::cout << "Inference completed successfully in " << duration.count() << " μs" << std::endl;
             std::cout << "Average time per sample: " << (double)duration.count() / num_test_points << " μs" << std::endl;
         } else {
             std::cerr << "Inference failed!" << std::endl;
         }
+        
+        // Clean up GPU buffers
+        cudaFree(d_test_samples);
+        cudaFree(d_output_values);
+        cudaFree(d_output_weights);
         
         return success;
     }
